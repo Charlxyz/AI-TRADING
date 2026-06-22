@@ -506,7 +506,7 @@ python diagnose.py --htf_data data/BTCUSD_15m.csv --ltf_data data/BTCUSD_5m.csv
 
 # 4. Entraîner l'agent
 python train.py --htf_data data/BTCUSD_15m.csv --ltf_data data/BTCUSD_5m.csv \
-                --timesteps 300000 --seed 42
+                --timesteps 300000 --seed 42 --n_envs 5
 
 # 5. Analyser les résultats
 python backtest.py --htf_data data/BTCUSD_15m.csv --ltf_data data/BTCUSD_5m.csv \
