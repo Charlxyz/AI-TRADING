@@ -1,0 +1,15 @@
+{
+  "run_id": "BTCUSD_seed123",
+  "dataset": "BTCUSD",
+  "seed": 123,
+  "rb_pnl": 1340.0330649211053,
+  "rb_sharpe": 2.5297412642540156,
+  "rb_winrate": 0.5764705882352941,
+  "rb_trades": 85,
+  "rl_pnl": 2047.3080807883039,
+  "rl_sharpe": 4.373713952098787,
+  "rl_winrate": 0.6266666666666667,
+  "rl_trades": 75,
+  "rl_conformity": 1.0,
+  "rl_drawdown": -0.03959609959604004
+}
