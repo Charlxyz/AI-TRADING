@@ -1,0 +1,33 @@
+{
+  "initial_balance": 5000.0,
+  "balance": 5050.0,
+  "trades": [
+    {
+      "id": 1,
+      "direction": "sell",
+      "entry_price": 69.15,
+      "stop_loss": 69.495,
+      "take_profit": 68.805,
+      "position_size": 144.92753623188455,
+      "risk_amount": 50.0,
+      "entry_time": "2026-06-23 14:45:02",
+      "had_fvg": true,
+      "had_ltf_model": true,
+      "exit_price": 68.805,
+      "exit_time": "2026-06-23 15:15:07",
+      "pnl_usdt": 50.0,
+      "pnl_pct": 1.0,
+      "status": "tp_hit",
+      "close_reason": "TP atteint"
+    }
+  ],
+  "equity_curve": [
+    5000.0,
+    5000.0,
+    5000.0,
+    5000.0,
+    5000.0,
+    5000.0
+  ],
+  "saved_at": "2026-06-23T15:15:07.849114"
+}

@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>FVG Paper Trading — Rapport</title>
+<style>
+  :root {
+    --bg: #0d1117; --surface: #161b22; --border: #30363d;
+    --green: #3fb950; --red: #f85149; --yellow: #d29922;
+    --blue: #58a6ff; --purple: #bc8cff; --text: #c9d1d9;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'Consolas', monospace; padding: 24px; }
+  h1 { color: var(--blue); font-size: 1.4rem; margin-bottom: 4px; }
+  .sub { color: #8b949e; font-size: 0.85rem; margin-bottom: 24px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 24px; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 14px; }
+  .card .label { font-size: 0.75rem; color: #8b949e; margin-bottom: 4px; }
+  .card .value { font-size: 1.3rem; font-weight: bold; }
+  .green { color: var(--green); } .red { color: var(--red); }
+  .yellow { color: var(--yellow); } .blue { color: var(--blue); }
+  .purple { color: var(--purple); }
+  table { width: 100%; border-collapse: collapse; font-size: 0.82rem; margin-top: 16px; }
+  th { background: var(--surface); color: #8b949e; padding: 8px 12px; text-align: left; border-bottom: 1px solid var(--border); }
+  td { padding: 7px 12px; border-bottom: 1px solid #21262d; }
+  tr:hover td { background: #1c2128; }
+  .badge { padding: 2px 7px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; }
+  .badge-tp { background: #1a4731; color: var(--green); }
+  .badge-sl { background: #3d1a1a; color: var(--red); }
+  .badge-ok { background: #1a2e4a; color: var(--blue); }
+  .badge-warn { background: #3d2e1a; color: var(--yellow); }
+  .badge-bad { background: #3d1a1a; color: var(--red); }
+  canvas { display: block; margin-top: 24px; }
+  .section-title { font-size: 0.9rem; color: #8b949e; margin: 20px 0 10px; text-transform: uppercase; letter-spacing: 0.08em; }
+</style>
+</head>
+<body>
+<h1>⚡ FVG Base Hits — Rapport Paper Trading</h1>
+<p class="sub">Généré le 25/06/2026 05:43 · 4 trades · Capital initial : 1000.00$</p>
+
+<div class="grid">
+  <div class="card"><div class="label">Balance finale</div><div class="value green">1040.60$</div></div>
+  <div class="card"><div class="label">PnL total</div><div class="value green">+40.60$</div></div>
+  <div class="card"><div class="label">Win rate</div><div class="value green">100.0%</div></div>
+  <div class="card"><div class="label">Trades</div><div class="value blue">4</div></div>
+  <div class="card"><div class="label">Max Drawdown</div><div class="value yellow">0.00%</div></div>
+  <div class="card"><div class="label">Sharpe ratio</div><div class="value green">1426.972</div></div>
+  <div class="card"><div class="label">Conformité FVG+LTF</div><div class="value purple">100.0%</div></div>
+  <div class="card"><div class="label">Moy. gain / perte</div><div class="value">+10.15$ / +0.00$</div></div>
+</div>
+
+<p class="section-title">Courbe d'équité</p>
+<canvas id="chart" height="80"></canvas>
+
+<p class="section-title">Historique des trades</p>
+<table>
+  <thead>
+    <tr>
+      <th>#</th><th>Direction</th><th>Levier</th><th>Entrée</th><th>Sortie</th>
+      <th>PnL ($)</th><th>PnL (%)</th><th>Notionnel</th><th>Statut</th>
+      <th>Conformité</th><th>Heure entrée</th>
+    </tr>
+  </thead>
+  <tbody>
+  <tr><td>4</td><td><b>▲ BUY</b></td><td>59688.00</td><td>60313.69</td><td class='green'><b>+10.30$</b></td><td class='green'>+1.00%</td><td><span class="badge badge-tp">✅ TP</span></td><td><span class="badge badge-ok">✅ FVG+LTF</span></td><td>2026-06-24 19:30:05</td></tr>
+<tr><td>3</td><td><b>▼ SELL</b></td><td>62867.99</td><td>62575.69</td><td class='green'><b>+10.20$</b></td><td class='green'>+1.00%</td><td><span class="badge badge-tp">✅ TP</span></td><td><span class="badge badge-ok">✅ FVG+LTF</span></td><td>2026-06-24 14:15:09</td></tr>
+<tr><td>2</td><td><b>▲ BUY</b></td><td>62150.09</td><td>62226.92</td><td class='green'><b>+10.10$</b></td><td class='green'>+1.00%</td><td><span class="badge badge-tp">✅ TP</span></td><td><span class="badge badge-ok">✅ FVG+LTF</span></td><td>2026-06-23 20:45:09</td></tr>
+<tr><td>1</td><td><b>▼ SELL</b></td><td>62636.00</td><td>62526.95</td><td class='green'><b>+10.00$</b></td><td class='green'>+1.00%</td><td><span class="badge badge-tp">✅ TP</span></td><td><span class="badge badge-ok">✅ FVG+LTF</span></td><td>2026-06-23 18:45:07</td></tr>
+
+  </tbody>
+</table>
+
+<script>
+const eq = [1000.0, 1000.0, 1010.0, 1010.0, 1010.0, 1010.0, 1010.0, 1010.0, 1010.0, 1010.0, 1020.1, 1020.1, 1020.1, 1020.1, 1020.1, 1020.1, 1020.1, 1020.1, 1020.1, 1020.1, 1020.1, 1020.1, 1020.1, 1020.1, 1020.1, 1020.1, 1020.1, 1020.1, 1020.1, 1020.1, 1020.1, 1020.1, 1020.1, 1020.1, 1020.1, 1020.1, 1020.1, 1030.301, 1030.301, 1030.301, 1030.301, 1030.301, 1030.301, 1030.301, 1030.301, 1030.301, 1030.301, 1030.301, 1030.301, 1030.301, 1030.301, 1030.301, 1030.301, 1030.301, 1030.301, 1030.301, 1030.301, 1030.301, 1030.301, 1030.301, 1030.301, 1030.301, 1030.301, 1030.301, 1030.301];
+const canvas = document.getElementById('chart');
+canvas.width = document.body.clientWidth - 48;
+const ctx = canvas.getContext('2d');
+const mn = Math.min(...eq), mx = Math.max(...eq), spread = mx - mn || 1;
+const w = canvas.width, h = canvas.height;
+ctx.strokeStyle = eq[eq.length-1] >= eq[0] ? '#3fb950' : '#f85149';
+ctx.lineWidth = 1.5;
+ctx.beginPath();
+eq.forEach((v, i) => {
+  const x = (i / (eq.length - 1)) * w;
+  const y = h - ((v - mn) / spread) * (h - 4) - 2;
+  i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+});
+ctx.stroke();
+// Ligne de base (capital initial)
+const baseY = h - ((1000.0 - mn) / spread) * (h - 4) - 2;
+ctx.setLineDash([4, 4]);
+ctx.strokeStyle = '#30363d';
+ctx.lineWidth = 1;
+ctx.beginPath();
+ctx.moveTo(0, baseY);
+ctx.lineTo(w, baseY);
+ctx.stroke();
+</script>
+</body>
+</html>
