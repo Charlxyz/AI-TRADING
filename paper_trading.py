@@ -239,14 +239,21 @@ def main():
     parser.add_argument("--log",       type=str, default=None,           help="Fichier de sauvegarde (defaut: paper_sessions/SYMBOL/SYMBOL.json)")
     parser.add_argument("--leverage",  type=int, default=1,              help="Levier (defaut: 1 = pas de levier, ex: 10 = x10)")
     parser.add_argument("--no_dashboard", action="store_true",           help="Mode console (sans curses)")
+    # Arguments OANDA (Forex / Or / Indices)
+    parser.add_argument("--oanda_key",     type=str, default="",  help="Cle API OANDA (pour Forex/Or)")
+    parser.add_argument("--oanda_account", type=str, default="",  help="Account ID OANDA")
+    parser.add_argument("--oanda_live",    action="store_true",   help="Utiliser le serveur live OANDA (defaut: demo)")
     args = parser.parse_args()
 
     # Isolation par symbole : chaque actif a son propre dossier et fichier JSON.
     # Deux terminaux sur BTCUSDT et SOLUSDT n'interferent jamais.
     symbol_clean = args.symbol.upper().replace("/", "")
+    # Nom unique incluant HTF et LTF : BTCUSDT_15m_1m.json
+    # Deux runs du même actif avec des timeframes différents ne s'écrasent pas
+    run_id       = f"{symbol_clean}_{args.htf}_{args.ltf}"
     session_dir  = os.path.join("paper_sessions", symbol_clean)
     os.makedirs(session_dir, exist_ok=True)
-    log_path = args.log if args.log else os.path.join(session_dir, f"{symbol_clean}.json")
+    log_path = args.log if args.log else os.path.join(session_dir, f"{run_id}.json")
 
     print("=" * 55)
     print(f"  FVG BASE HITS — PAPER TRADING [{symbol_clean}]")
@@ -256,6 +263,11 @@ def main():
     print(f"  Capital  : {args.balance:.2f}$  |  Risque : {args.risk*100:.1f}%")
     lev_label = f"x{args.leverage}" if args.leverage > 1 else "Aucun (x1)"
     print(f"  Levier   : {lev_label}")
+    # Détection source avant affichage
+    from live_fetcher import detect_source, to_oanda_instrument
+    src = detect_source(args.symbol)
+    src_label = f"OANDA ({to_oanda_instrument(args.symbol)})" if src == "oanda" else "Binance"
+    print(f"  Source   : {src_label}")
     print(f"  Modele   : {args.model}")
     print(f"  Session  : {session_dir}/")
     print(f"  Log      : {log_path}")
@@ -277,13 +289,16 @@ def main():
     print("✅ Modèle chargé.")
 
     # 2. Connexion Binance et chargement initial des données
-    print(f"⏳ Connexion à Binance ({args.symbol})...")
+    print(f"Connexion a {src_label}...")
     feed = LiveDataFeed(
         symbol=args.symbol,
         htf=args.htf,
         ltf=args.ltf,
         htf_lookback=150,
         ltf_lookback=450,
+        oanda_key=args.oanda_key,
+        oanda_account=args.oanda_account,
+        oanda_demo=not args.oanda_live,
     )
     if not feed.initialize():
         print(f"❌ Impossible de récupérer les données Binance.")

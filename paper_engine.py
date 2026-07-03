@@ -98,6 +98,8 @@ class PaperTradingEngine:
         self.leverage = max(1, int(leverage))  # minimum 1x
         self.log_path = Path(log_path)
         self.log_path.parent.mkdir(parents=True, exist_ok=True)
+        # Nom du fichier visible dans les logs
+        self.session_name = self.log_path.stem
         self.min_fvg_conformity = min_fvg_conformity
 
         self.open_trade: Optional[LiveTrade] = None
