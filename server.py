@@ -19,10 +19,11 @@ import time
 import logging
 from datetime import datetime
 from pathlib import Path
+from typing import Optional
 
 # ── Imports projet ──────────────────────────────────────────────────
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from live_fetcher import LiveDataFeed
+from live_fetcher import MarketDataHub
 from paper_engine import PaperTradingEngine
 
 # ── WebSocket ────────────────────────────────────────────────────────
@@ -43,19 +44,30 @@ logging.basicConfig(level=logging.WARNING)
 
 class SymbolWorker:
     """
-    Gère un actif : fetcher Binance + moteur paper trading.
-    Tourne dans son propre thread.
+    Gère un actif : moteur paper trading uniquement.
+
+    Contrairement à la version précédente, ce worker ne fait PLUS aucun appel
+    réseau lui-même et ne tourne plus dans son propre thread. Les données de
+    marché (bougies HTF/LTF + prix) viennent d'un MarketDataHub partagé entre
+    tous les workers : si deux workers utilisent le même (symbole, intervalle)
+    — ex. BTCUSDT en 15m pour les combos 15m/1m ET 15m/5m — la donnée n'est
+    téléchargée qu'une seule fois et lue par les deux.
+
+    Le worker s'enregistre auprès du hub à la création (`hub.register(...)`),
+    puis sa méthode `tick()` est appelée périodiquement par le MarketPoller
+    central : il lit ce que le hub a déjà en cache, détecte si SA bougie HTF
+    a changé, et déclenche l'agent si c'est le cas.
     """
 
-    def __init__(self, cfg: dict, model_path: str, global_cfg: dict):
+    def __init__(self, cfg: dict, model_path: str, global_cfg: dict, hub: MarketDataHub):
         self.symbol      = cfg["symbol"]
         self.htf         = cfg.get("htf", "15m")
         self.ltf         = cfg.get("ltf", "1m")
         self.balance_init = cfg.get("balance", global_cfg.get("initial_balance", 1000.0))
         self.risk_pct    = cfg.get("risk_pct", global_cfg.get("risk_pct", 0.01))
         self.leverage    = cfg.get("leverage", global_cfg.get("leverage", 1))
-        self.refresh_sec = global_cfg.get("refresh_interval", 15)
         self.model_path  = model_path
+        self.hub         = hub
 
         # Nom unique : BTCUSDT_15m_1m → deux configs du même actif ne s'écrasent pas
         self.run_id   = f"{self.symbol}_{self.htf}_{self.ltf}"
@@ -72,25 +84,20 @@ class SymbolWorker:
         self.last_result: dict = {}
         self.last_update = ""
 
-        self.feed   = None
-        self.engine = None
-        self._thread: threading.Thread = None
-        self._running = False
+        self.engine: Optional[PaperTradingEngine] = None
+        self._last_htf_seen = None    # dernier timestamp HTF déjà traité par CE worker
+
+        # Déclare ses besoins auprès du hub. Idempotent : si un autre worker a
+        # déjà enregistré le même (symbole, intervalle), aucun fetch en double
+        # n'est créé — seul le lookback max demandé est retenu.
+        self.hub.register(self.symbol, self.htf, lookback=150)
+        self.hub.register(self.symbol, self.ltf, lookback=900)
 
     # ── Démarrage ───────────────────────────────────────────────────
 
-    def start(self):
-        self._running = True
-        self._thread = threading.Thread(target=self._run, daemon=True, name=f"worker-{self.symbol}")
-        self._thread.start()
-
-    def stop(self):
-        self._running = False
-
-    def _run(self):
-        """Boucle principale du worker."""
+    def load_model(self) -> bool:
+        """Charge le moteur PPO. Retourne True si succès. Pas d'appel réseau ici."""
         try:
-            # 1. Moteur
             self.engine = PaperTradingEngine(
                 model_path=self.model_path,
                 initial_balance=self.balance_init,
@@ -100,59 +107,15 @@ class SymbolWorker:
             )
             if not self.engine.model_loaded:
                 self._set_error(f"Modèle non chargé : {self.engine.model_error}")
-                return
-
-            # 2. Feed
-            self.feed = LiveDataFeed(
-                symbol=self.symbol,
-                htf=self.htf,
-                ltf=self.ltf,
-                htf_lookback=150,
-                ltf_lookback=900,
-            )
-            if not self.feed.initialize():
-                self._set_error(f"Binance init failed : {self.feed.errors}")
-                return
-
-            with self.lock:
-                self.status = "ok"
-                self.last_update = datetime.now().strftime("%H:%M:%S")
-
-            # 3. Boucle principale
-            while self._running:
-                try:
-                    result = self.feed.refresh()
-                    price  = result.get("current_price", 0.0)
-
-                    if result.get("new_htf_candle") and self.feed.is_ready:
-                        engine_result = self.engine.on_new_candle(
-                            self.feed.htf_candles,
-                            self.feed.ltf_candles,
-                            price,
-                        )
-                        with self.lock:
-                            self.last_result  = engine_result
-                            self.last_update  = datetime.now().strftime("%H:%M:%S")
-
-                    # PnL latent de la position ouverte
-                    if self.engine.open_trade and price > 0:
-                        t = self.engine.open_trade
-                        if t.direction == "buy":
-                            t.pnl_usdt = (price - t.entry_price) * t.position_size
-                        else:
-                            t.pnl_usdt = (t.entry_price - price) * t.position_size
-
-                    with self.lock:
-                        self.last_update = datetime.now().strftime("%H:%M:%S")
-
-                except Exception as e:
-                    with self.lock:
-                        self.error = str(e)
-
-                time.sleep(self.refresh_sec)
-
+                return False
         except Exception as e:
             self._set_error(str(e))
+            return False
+
+        with self.lock:
+            self.status = "ok"
+            self.last_update = datetime.now().strftime("%H:%M:%S")
+        return True
 
     def _set_error(self, msg: str):
         with self.lock:
@@ -160,15 +123,61 @@ class SymbolWorker:
             self.error  = msg
         print(f"[{self.symbol}] ERREUR : {msg}")
 
+    # ── Cycle appelé par le MarketPoller central ─────────────────────
+
+    def tick(self):
+        """
+        Appelé à chaque cycle, une fois que le hub a rafraîchi ses données.
+        Ne fait aucune requête Binance : lit uniquement ce que le hub a déjà
+        en cache, propre à ce worker (sa balance, ses trades, sa position
+        restent individuels — seule la donnée de marché brute est partagée).
+        """
+        if self.status != "ok" or self.engine is None:
+            return
+
+        try:
+            price = self.hub.get_price(self.symbol)
+            htf_candles = self.hub.get_candles(self.symbol, self.htf)
+            ltf_candles = self.hub.get_candles(self.symbol, self.ltf)
+
+            if htf_candles is None or ltf_candles is None:
+                return
+
+            ready = len(htf_candles) >= 20 and len(ltf_candles) >= 10
+            htf_time = self.hub.get_last_time(self.symbol, self.htf)
+            new_htf_candle = ready and htf_time is not None and htf_time != self._last_htf_seen
+
+            if new_htf_candle:
+                self._last_htf_seen = htf_time
+                engine_result = self.engine.on_new_candle(htf_candles, ltf_candles, price)
+                with self.lock:
+                    self.last_result = engine_result
+                    self.last_update = datetime.now().strftime("%H:%M:%S")
+
+            # PnL latent de la position ouverte, mis à jour à chaque tick
+            # (indépendamment d'une nouvelle bougie HTF ou non)
+            if self.engine.open_trade and price > 0:
+                t = self.engine.open_trade
+                if t.direction == "buy":
+                    t.pnl_usdt = (price - t.entry_price) * t.position_size
+                else:
+                    t.pnl_usdt = (t.entry_price - price) * t.position_size
+
+            with self.lock:
+                self.last_update = datetime.now().strftime("%H:%M:%S")
+
+        except Exception as e:
+            with self.lock:
+                self.error = str(e)
+
     # ── Snapshot JSON pour WebSocket ─────────────────────────────────
 
     def snapshot(self) -> dict:
         """Retourne un dict JSON-sérialisable de l'état courant."""
         with self.lock:
             engine = self.engine
-            feed   = self.feed
 
-        if engine is None or feed is None:
+        if engine is None:
             return {
                 "symbol": self.symbol, "htf": self.htf, "ltf": self.ltf,
                 "status": self.status, "error": self.error,
@@ -225,7 +234,7 @@ class SymbolWorker:
             "ltf":         self.ltf,
             "status":      self.status,
             "error":       self.error,
-            "price":       feed.current_price,
+            "price":       self.hub.get_price(self.symbol),
             "balance":     round(engine.balance, 2),
             "pnl":         round(pnl, 2),
             "pnl_pct":     round(pnl / engine.initial_balance * 100, 2),
@@ -242,11 +251,47 @@ class SymbolWorker:
                 "message":      lr.get("message", ""),
             },
             "last_update":  self.last_update,
-            "time_to_htf":  round(feed.time_to_next_htf()),
-            "htf_count":    len(feed.htf_candles) if feed.htf_candles is not None else 0,
-            "ltf_count":    len(feed.ltf_candles) if feed.ltf_candles is not None else 0,
+            "time_to_htf":  round(self.hub.time_to_next_close(self.htf)),
+            "htf_count":    self.hub.candle_count(self.symbol, self.htf),
+            "ltf_count":    self.hub.candle_count(self.symbol, self.ltf),
             "leverage":     self.leverage,
         }
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# MarketPoller — thread unique qui pilote tout le rafraîchissement
+# ──────────────────────────────────────────────────────────────────────────────
+
+class MarketPoller(threading.Thread):
+    """
+    Remplace les N threads individuels (un par worker) qui existaient avant.
+    Un seul thread :
+      1. demande au hub de se rafraîchir (une requête par (symbole, intervalle)
+         unique et une requête ticker par symbole unique, quel que soit le
+         nombre de workers qui les utilisent)
+      2. appelle ensuite `tick()` sur chaque worker, qui lit le cache du hub
+         et ne fait donc aucun appel réseau supplémentaire.
+    """
+
+    def __init__(self, hub: MarketDataHub, workers: list[SymbolWorker], interval: int = 15):
+        super().__init__(daemon=True, name="market-poller")
+        self.hub = hub
+        self.workers = workers
+        self.interval = interval
+        self.running = True
+
+    def run(self):
+        while self.running:
+            try:
+                self.hub.refresh()
+            except Exception as e:
+                print(f"[MarketPoller] Erreur de rafraîchissement : {e}")
+            for w in self.workers:
+                w.tick()
+            time.sleep(self.interval)
+
+    def stop(self):
+        self.running = False
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -325,8 +370,8 @@ class MultiAssetServer:
 
         if action == "close_position" and symbol in self.workers:  # symbol = run_id ici
             w = self.workers[symbol]
-            if w.engine and w.engine.open_trade and w.feed:
-                w.engine.force_close(w.feed.current_price)
+            if w.engine and w.engine.open_trade:
+                w.engine.force_close(w.hub.get_price(w.symbol))
                 await ws.send(json.dumps({
                     "type": "info",
                     "msg": f"{symbol} : position clôturée manuellement"
@@ -402,14 +447,34 @@ def main():
     print(f"  Port    : {port} (HTTP) / {port+1} (WebSocket)")
     print()
 
-    # Démarrage des workers
-    workers = []
-    for s_cfg in symbols_cfg:
-        print(f"  ⏳ Démarrage {s_cfg['symbol']} ({s_cfg['htf']}/{s_cfg['ltf']})...")
-        w = SymbolWorker(s_cfg, args.model, global_cfg)
-        w.start()
-        workers.append(w)
-        time.sleep(0.5)  # évite de saturer l'API Binance
+    refresh_interval = global_cfg.get("refresh_interval", 15)
+
+    # 1. Un seul hub de données pour tout le serveur : chaque worker s'y
+    #    enregistre, mais les (symbole, intervalle) identiques entre workers
+    #    ne sont téléchargés qu'une fois.
+    hub = MarketDataHub()
+    workers = [SymbolWorker(s_cfg, args.model, global_cfg, hub) for s_cfg in symbols_cfg]
+
+    n_pairs = len({(s_cfg["symbol"], s_cfg["htf"]) for s_cfg in symbols_cfg} |
+                  {(s_cfg["symbol"], s_cfg["ltf"]) for s_cfg in symbols_cfg})
+    n_symbols = len({s_cfg["symbol"] for s_cfg in symbols_cfg})
+    print(f"  ⏳ {len(workers)} workers → {n_pairs} paires (symbole, intervalle) uniques "
+          f"+ {n_symbols} prix uniques à récupérer par cycle (au lieu de "
+          f"{len(workers) * 3} requêtes sans mutualisation)")
+
+    if not hub.initialize():
+        print("⚠️  Certaines données initiales n'ont pas pu être chargées :")
+        for err in hub.errors:
+            print(f"   {err}")
+
+    # 2. Chargement des modèles PPO (pas d'appel réseau ici)
+    for w in workers:
+        print(f"  ⏳ Chargement du modèle pour {w.symbol} ({w.htf}/{w.ltf})...")
+        w.load_model()
+
+    # 3. Un seul thread pilote le rafraîchissement de TOUS les workers
+    poller = MarketPoller(hub, workers, interval=refresh_interval)
+    poller.start()
 
     # Serveur HTTP pour dashboard.html
     start_http_server(port)
@@ -424,8 +489,8 @@ def main():
         asyncio.run(server.serve())
     except KeyboardInterrupt:
         print("\n⏹  Arrêt — sauvegarde des sessions...")
+        poller.stop()
         for w in workers:
-            w.stop()
             if w.engine:
                 w.engine._save_history()
         print("✅ Sessions sauvegardées.")

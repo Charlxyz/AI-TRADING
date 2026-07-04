@@ -8,95 +8,15 @@
     "web_port": 8765
   },
   "symbols": [
-    {
-      "symbol": "BTCUSDT",
-      "htf": "15m",
-      "ltf": "1m",
-      "balance": 1000.0,
-      "risk_pct": 0.01,
-      "leverage": 1,
-      "enabled": true
-    },
-    {
-      "symbol": "BTCUSDT",
-      "htf": "15m",
-      "ltf": "5m",
-      "balance": 1000.0,
-      "risk_pct": 0.01,
-      "leverage": 1,
-      "enabled": true
-    },
-    {
-      "symbol": "BTCUSDT",
-      "htf": "5m",
-      "ltf": "1m",
-      "balance": 1000.0,
-      "risk_pct": 0.01,
-      "leverage": 1,
-      "enabled": true
-    },
-    {
-      "symbol": "ETHUSDT",
-      "htf": "15m",
-      "ltf": "1m",
-      "balance": 1000.0,
-      "risk_pct": 0.01,
-      "leverage": 1,
-      "enabled": false
-    },
-    {
-      "symbol": "ETHUSDT",
-      "htf": "15m",
-      "ltf": "5m",
-      "balance": 1000.0,
-      "risk_pct": 0.01,
-      "leverage": 1,
-      "enabled": false
-    },
-    {
-      "symbol": "ETHUSDT",
-      "htf": "5m",
-      "ltf": "1m",
-      "balance": 1000.0,
-      "risk_pct": 0.01,
-      "leverage": 1,
-      "enabled": false
-    },
-    {
-      "symbol": "SOLUSDT",
-      "htf": "15m",
-      "ltf": "5m",
-      "balance": 1000.0,
-      "risk_pct": 0.01,
-      "leverage": 1,
-      "enabled": true
-    },
-    {
-      "symbol": "SOLUSDT",
-      "htf": "15m",
-      "ltf": "1m",
-      "balance": 1000.0,
-      "risk_pct": 0.01,
-      "leverage": 1,
-      "enabled": true
-    },
-    {
-      "symbol": "SOLUSDT",
-      "htf": "5m",
-      "ltf": "1m",
-      "balance": 1000.0,
-      "risk_pct": 0.01,
-      "leverage": 1,
-      "enabled": true
-    },
-    {
-      "symbol": "BNBUSDT",
-      "htf": "15m",
-      "ltf": "1m",
-      "balance": 1000.0,
-      "risk_pct": 0.01,
-      "leverage": 1,
-      "enabled": false
-    }
+    {"symbol": "BTCUSDT", "htf": "15m", "ltf": "1m", "balance": 1000.0, "risk_pct": 0.01, "leverage": 1, "enabled": true},
+    {"symbol": "BTCUSDT", "htf": "15m", "ltf": "5m", "balance": 1000.0, "risk_pct": 0.01, "leverage": 1, "enabled": true},
+    {"symbol": "BTCUSDT", "htf": "5m", "ltf": "1m", "balance": 1000.0, "risk_pct": 0.01, "leverage": 1, "enabled": true},
+    {"symbol": "ETHUSDT", "htf": "15m", "ltf": "1m", "balance": 1000.0, "risk_pct": 0.01, "leverage": 1, "enabled": true},
+    {"symbol": "ETHUSDT", "htf": "15m", "ltf": "5m", "balance": 1000.0, "risk_pct": 0.01, "leverage": 1, "enabled": true},
+    {"symbol": "ETHUSDT", "htf": "5m", "ltf": "1m", "balance": 1000.0, "risk_pct": 0.01, "leverage": 1, "enabled": true},
+    {"symbol": "SOLUSDT", "htf": "15m", "ltf": "5m", "balance": 1000.0, "risk_pct": 0.01, "leverage": 1, "enabled": true},
+    {"symbol": "SOLUSDT", "htf": "15m", "ltf": "1m", "balance": 1000.0, "risk_pct": 0.01, "leverage": 1, "enabled": true},
+    {"symbol": "SOLUSDT", "htf": "5m", "ltf": "1m", "balance": 1000.0, "risk_pct": 0.01, "leverage": 1, "enabled": true},
+    {"symbol": "BNBUSDT", "htf": "15m", "ltf": "1m", "balance": 1000.0, "risk_pct": 0.01, "leverage": 1, "enabled": false}
   ]
 }

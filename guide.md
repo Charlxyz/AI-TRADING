@@ -1,8 +1,8 @@
-# Guide d'utilisation — De zéro à l'agent entraîné
+# Guide d'utilisation — De zéro à l'agent entraîné (et en paper trading)
 
 Ce guide couvre toutes les étapes pour installer le projet, télécharger des
-données, entraîner l'agent et analyser les résultats. Suis les étapes dans
-l'ordre.
+données, entraîner l'agent, analyser les résultats, puis le faire tourner en
+paper trading (mono-actif ou multi-actifs). Suis les étapes dans l'ordre.
 
 ---
 
@@ -73,6 +73,13 @@ fvg_trader/
 ├── validate.py
 ├── download_data.py
 ├── diagnose.py
+├── live_fetcher.py
+├── paper_engine.py
+├── paper_trading.py
+├── dashboard.py
+├── paper_report.py
+├── server.py
+├── config.json
 ├── requirements.txt
 ├── README.md
 └── guide.md
@@ -152,12 +159,23 @@ L'installation télécharge et installe automatiquement :
 - `gymnasium` — le framework d'environnement de simulation
 - `numpy` et `pandas` — calcul numérique et manipulation des données
 - `matplotlib` — génération des graphiques
-- `yfinance` — téléchargement des données historiques
 
-Cela prend entre 1 et 5 minutes selon ta connexion. Tu verras des lignes
-défiler. C'est normal.
+Pour le paper trading, installe en plus :
 
-Une fois terminé, vérifie que tout est bien installé :
+```
+pip install yfinance requests websockets
+```
+
+- `yfinance` — téléchargement des données historiques (entraînement)
+- `requests` — appels à l'API Binance/OANDA en paper trading
+- `websockets` — nécessaire uniquement pour le mode multi-actifs (`server.py`)
+
+> ℹ️ Sur **Windows**, le module `curses` utilisé par le dashboard terminal
+> mono-actif n'est pas inclus par défaut. Installe `windows-curses` :
+> `pip install windows-curses`. Si tu préfères l'éviter, lance simplement
+> `paper_trading.py` avec l'option `--no_dashboard`.
+
+Une fois terminé, vérifie que l'essentiel est bien installé :
 
 ```
 python -c "import stable_baselines3, gymnasium, pandas, numpy, matplotlib; print('OK')"
@@ -185,7 +203,9 @@ PERIOD = "60d"
 > Yahoo Finance limite le 1m à 7 jours d'historique. Si tu télécharges 60 jours
 > de HTF mais seulement 7 jours de LTF, l'agent entraîne sur des données mal
 > alignées : les signaux LTF ne correspondent pas aux bonnes bougies HTF.
-> Le 5m couvre les 60 jours complets → alignement parfait.
+> Le 5m couvre les 60 jours complets → alignement parfait. (Cette limite ne
+> concerne que l'entraînement historique via Yahoo Finance — le paper trading,
+> à l'étape 11, utilise un flux live sans cette contrainte.)
 
 ### Changer de marché (optionnel)
 
@@ -439,6 +459,139 @@ python train.py --htf_data data/ETHUSD_15m.csv --ltf_data data/ETHUSD_5m.csv \
 
 ---
 
+## Étape 11 — Paper trading mono-actif (tester l'agent en direct)
+
+Une fois un modèle validé, tu peux l'observer face à un marché réel — sans
+risquer d'argent. Le paper trading se branche sur Binance (crypto, aucune clé
+API nécessaire) ou sur OANDA (Forex/Or/Indices, nécessite une clé API et un
+compte démo ou live).
+
+### Lancer le paper trading avec dashboard terminal
+
+```
+python paper_trading.py --model models/best_model.zip --symbol BTCUSDT
+```
+
+Tu verras un dashboard terminal se rafraîchir en direct : prix, balance,
+position ouverte, dernier signal de l'agent (avec sa conformité FVG+LTF),
+métriques cumulées et historique des trades. Touches disponibles :
+`q` pour quitter, `c` pour clôturer manuellement la position ouverte.
+
+> ⚠️ Sur Windows, si `curses` pose problème, installe `windows-curses`
+> (voir Étape 4) ou lance en mode console (voir plus bas).
+
+### Mode console (sans dashboard graphique)
+
+```
+python paper_trading.py --model models/best_model.zip --symbol BTCUSDT --no_dashboard
+```
+
+Utile sur un serveur sans terminal interactif, ou si `curses` n'est pas
+disponible sur ta machine.
+
+### Paramètres utiles
+
+```
+--symbol     Symbole Binance (ex: BTCUSDT) ou instrument OANDA
+--htf / --ltf  Intervalles (défaut : 15m / 5m)
+--balance    Capital paper de départ (défaut : 10000)
+--risk       Risque par trade (défaut : 0.01 = 1%)
+--leverage   Levier (défaut : 1 = aucun levier)
+--log        Fichier de sauvegarde JSON (défaut : paper_sessions/SYMBOLE/...)
+--oanda_key / --oanda_account / --oanda_live   Pour trader du Forex/Or/Indices via OANDA
+```
+
+Exemple avec du Forex via OANDA (compte démo) :
+```
+python paper_trading.py --model models/best_model.zip --symbol EUR_USD \
+                        --oanda_key TA_CLE_API --oanda_account TON_ID_COMPTE
+```
+
+### Génère un rapport HTML de la session
+
+À tout moment (même pendant que la session tourne, puisque l'historique est
+sauvegardé au fil de l'eau) :
+
+```
+python paper_report.py --symbol BTCUSDT
+```
+
+Ouvre le fichier `.html` généré dans un navigateur pour voir la courbe
+d'équité, les métriques et le détail de chaque trade.
+
+### Reprise après interruption
+
+Si tu arrêtes le script (`q` ou Ctrl+C) puis le relances avec les mêmes
+`--symbol`/`--htf`/`--ltf`, il retrouve automatiquement son historique et sa
+balance depuis le fichier JSON — rien n'est perdu.
+
+---
+
+## Étape 12 — Paper trading multi-actifs (dashboard web)
+
+Pour surveiller plusieurs actifs (ou plusieurs combinaisons HTF/LTF du même
+actif) en même temps, avec un seul modèle et un dashboard web, utilise
+`server.py` à la place de `paper_trading.py`.
+
+### Configurer `config.json`
+
+Ouvre `config.json` et ajuste la section `symbols` — un objet par actif à
+suivre :
+
+```json
+{
+  "global": {
+    "initial_balance": 1000.0,
+    "risk_pct": 0.01,
+    "leverage": 1,
+    "refresh_interval": 5,
+    "web_port": 8765
+  },
+  "symbols": [
+    {"symbol": "BTCUSDT", "htf": "15m", "ltf": "5m", "balance": 1000.0, "risk_pct": 0.01, "leverage": 1, "enabled": true},
+    {"symbol": "ETHUSDT", "htf": "15m", "ltf": "5m", "balance": 1000.0, "risk_pct": 0.01, "leverage": 1, "enabled": true}
+  ]
+}
+```
+
+- Passe `"enabled": false` pour désactiver un actif sans le supprimer.
+- Chaque actif peut avoir sa propre `balance`, `risk_pct` et `leverage`.
+- Deux entrées avec le même `symbol` mais des `htf`/`ltf` différents sont
+  suivies indépendamment (fichiers séparés dans `paper_sessions/`).
+
+### Lancer le serveur
+
+```
+python server.py --model models/best_model.zip --config config.json
+```
+
+Tu dois voir un résumé du nombre d'actifs et de requêtes réseau mutualisées,
+puis :
+
+```
+🌐 Dashboard disponible sur : http://localhost:8765/
+   WebSocket              sur : ws://localhost:8766/
+   (ouvre dashboard.html dans ton navigateur)
+```
+
+Ouvre `http://localhost:8765/dashboard.html` dans ton navigateur pour voir
+l'état de tous les actifs en direct, mis à jour chaque seconde.
+
+### Paramètres utiles
+
+```
+--model    Chemin vers le modèle .zip (obligatoire)
+--config   Fichier de configuration (défaut : config.json)
+--port     Port HTTP du dashboard (le WebSocket utilise port+1)
+```
+
+### Arrêter le serveur
+
+`Ctrl+C` dans le terminal sauvegarde automatiquement l'historique de chaque
+actif avant de quitter.
+
+---
+
 ## Résolution des problèmes courants
 
 ### "ModuleNotFoundError: No module named 'stable_baselines3'"
@@ -460,7 +613,7 @@ Puis relance ta commande.
 Python n'est pas dans le PATH. Sur Windows, réinstalle Python en cochant
 "Add Python to PATH". Sur macOS, essaie `python3` à la place de `python`.
 
-### "ValueError: Aucune donnée reçue"
+### "ValueError: Aucune donnée reçue" (download_data.py)
 
 Le symbole est incorrect ou Yahoo Finance est temporairement indisponible.
 Vérifie sur **finance.yahoo.com** que le symbole est exact.
@@ -489,6 +642,28 @@ export MPLBACKEND=Agg
 ```
 Les graphiques seront sauvegardés dans `results/` sans s'afficher.
 
+### `paper_trading.py` : "⚠️ Dashboard curses non disponible"
+
+Le script bascule automatiquement en mode console dans ce cas. Pour l'éviter
+sur Windows, installe `pip install windows-curses`, ou lance directement avec
+`--no_dashboard`.
+
+### `server.py` : "websockets non installé"
+
+Installe la dépendance manquante : `pip install websockets`, puis relance.
+
+### `server.py` : certains actifs restent en erreur au démarrage
+
+Vérifie le message affiché pour cet actif (`[SYMBOLE] ERREUR : ...`) — le plus
+souvent, le modèle indiqué avec `--model` n'existe pas au chemin donné, ou le
+symbole n'est pas reconnu par Binance/OANDA.
+
+### Impossible d'ouvrir une position en paper trading ("🚫 Trade bloqué")
+
+C'est le comportement attendu : comme à l'entraînement, l'agent ne peut pas
+ouvrir de trade sans FVG actif. Le message de blocage n'est pas une erreur,
+c'est la règle de conformité stratégie appliquée en direct.
+
 ---
 
 ## Résumé des commandes dans l'ordre
@@ -506,7 +681,7 @@ python diagnose.py --htf_data data/BTCUSD_15m.csv --ltf_data data/BTCUSD_5m.csv
 
 # 4. Entraîner l'agent
 python train.py --htf_data data/BTCUSD_15m.csv --ltf_data data/BTCUSD_5m.csv \
-                --timesteps 300000 --seed 42 --n_envs 5
+                --timesteps 300000 --seed 42
 
 # 5. Analyser les résultats
 python backtest.py --htf_data data/BTCUSD_15m.csv --ltf_data data/BTCUSD_5m.csv \
@@ -517,4 +692,13 @@ python validate.py \
     --datasets BTCUSD:data/BTCUSD_15m.csv:data/BTCUSD_5m.csv \
     --seeds 42 123 2024 \
     --timesteps 150000
+
+# 7. Paper trading mono-actif (dashboard terminal)
+python paper_trading.py --model models/best_model.zip --symbol BTCUSDT
+
+# 8. Rapport HTML de la session
+python paper_report.py --symbol BTCUSDT
+
+# 9. Paper trading multi-actifs (dashboard web)
+python server.py --model models/best_model.zip --config config.json
 ```
