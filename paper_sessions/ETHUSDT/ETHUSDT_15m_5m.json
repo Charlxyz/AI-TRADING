@@ -1,6 +1,6 @@
 {
   "initial_balance": 1000.0,
-  "balance": 1001.265243902439,
+  "balance": 994.0790653229323,
   "trades": [
     {
       "id": 1,
@@ -18,34 +18,38 @@
       "pnl_usdt": 1.265243902439029,
       "pnl_pct": 0.12652439024390288,
       "status": "manual",
-      "close_reason": "Clôture manuelle",
+      "close_reason": "Clï¿½ture manuelle",
       "leverage": 1,
       "notional_value": 899.9999999999999,
       "margin_used": 899.9999999999999
+    },
+    {
+      "id": 2,
+      "direction": "sell",
+      "entry_price": 1785.68,
+      "stop_loss": 1799.92,
+      "take_profit": 1771.44,
+      "position_size": 0.5046473721563747,
+      "risk_amount": 10.012652439024391,
+      "entry_time": "2026-07-04 17:15:22",
+      "had_fvg": true,
+      "had_ltf_model": true,
+      "exit_price": 1799.92,
+      "exit_time": "2026-07-04 20:00:15",
+      "pnl_usdt": -7.18617857950678,
+      "pnl_pct": -0.7177097800277771,
+      "status": "sl_hit",
+      "close_reason": "SL atteint",
+      "leverage": 1,
+      "notional_value": 901.1387195121952,
+      "margin_used": 901.1387195121952
     }
   ],
   "equity_curve": [
     1000.0,
-    1000.0,
-    1000.0,
-    1000.0,
-    1000.0,
-    1000.0,
-    1000.0,
-    1000.0,
-    1000.0,
-    1000.0,
-    1000.0,
-    1000.0,
-    1000.0,
-    1000.0,
-    1000.0,
-    1000.0,
-    1000.0,
-    1000.0,
-    1000.0,
-    1000.0,
-    1000.0
+    1001.265243902439,
+    994.0790653229323
   ],
-  "saved_at": "2026-07-04T16:39:12.155614"
+  "saved_at": "2026-07-05T04:46:53.974707",
+  "_note": "Trades de la session asiatique (23h-7h heure de Paris) retires. 1 trade(s) retire(s) sur 3 d'origine."
 }

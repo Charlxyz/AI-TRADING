@@ -239,6 +239,10 @@ def main():
     parser.add_argument("--log",       type=str, default=None,           help="Fichier de sauvegarde (defaut: paper_sessions/SYMBOL/SYMBOL.json)")
     parser.add_argument("--leverage",  type=int, default=1,              help="Levier (defaut: 1 = pas de levier, ex: 10 = x10)")
     parser.add_argument("--no_dashboard", action="store_true",           help="Mode console (sans curses)")
+    parser.add_argument("--session",   type=str, default="7-23",
+                        help="Plage UTC autorisee ex: '7-23' (bloque 23h-7h), '8-22' — defaut: pas de filtre")
+    parser.add_argument("--tz_offset", type=int, default=2,
+                        help="Decalage UTC en heures (defaut: 2 = Paris ete)")
     # Arguments OANDA (Forex / Or / Indices)
     parser.add_argument("--oanda_key",     type=str, default="",  help="Cle API OANDA (pour Forex/Or)")
     parser.add_argument("--oanda_account", type=str, default="",  help="Account ID OANDA")
@@ -263,6 +267,9 @@ def main():
     print(f"  Capital  : {args.balance:.2f}$  |  Risque : {args.risk*100:.1f}%")
     lev_label = f"x{args.leverage}" if args.leverage > 1 else "Aucun (x1)"
     print(f"  Levier   : {lev_label}")
+    if args.session:
+        s, e = args.session.split("-")
+        print(f"  Session  : {s}h-{e}h UTC autorisé (hors = bloqué)")
     # Détection source avant affichage
     from live_fetcher import detect_source, to_oanda_instrument
     src = detect_source(args.symbol)
@@ -282,6 +289,15 @@ def main():
         log_path=log_path,
         leverage=args.leverage,
     )
+    # Appliquer le filtre de session si demandé
+    if args.session:
+        try:
+            s, e = args.session.split("-")
+            engine.set_session_filter([(int(s), int(e))], tz_offset=args.tz_offset)
+            print(f"✅ Filtre session actif : {s}h-{e}h UTC (tz_offset={args.tz_offset}h)")
+        except Exception as ex:
+            print(f"⚠️  Filtre session ignoré : {ex}")
+
     if not engine.model_loaded:
         print(f"❌ Impossible de charger le modèle : {engine.model_error}")
         print("   Vérifie le chemin et que stable-baselines3 est installé.")

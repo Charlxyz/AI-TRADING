@@ -102,6 +102,14 @@ class PaperTradingEngine:
         self.session_name = self.log_path.stem
         self.min_fvg_conformity = min_fvg_conformity
 
+        # Filtre de session : heures UTC pendant lesquelles l'IA peut trader
+        # Session asiatique = 23h-08h UTC → bloquée par défaut
+        # Session européenne = 07h-16h UTC
+        # Session américaine = 13h-22h UTC
+        # On définit les plages AUTORISÉES (tout ce qui est hors plage = bloqué)
+        self.session_filter: list[tuple[int,int]] = []  # vide = pas de filtre
+        self.session_tz_offset: int = 0  # décalage UTC en heures (ex: +2 pour Paris)
+
         self.open_trade: Optional[LiveTrade] = None
         self.trades: list[LiveTrade] = []
         self.equity_curve: list[float] = [initial_balance]
@@ -130,6 +138,39 @@ class PaperTradingEngine:
 
         # Chargement de l'historique si le fichier existe
         self._load_history()
+
+    # ------------------------------------------------------------------
+    # Filtre de session
+    # ------------------------------------------------------------------
+
+    def set_session_filter(self, allowed_ranges: list[tuple[int,int]], tz_offset: int = 0):
+        """
+        Définit les plages horaires UTC autorisées pour trader.
+        Ex: [(7, 16), (13, 22)] = sessions Europe + US
+            [(8, 22)] = tout sauf la nuit asiatique
+        tz_offset : décalage depuis UTC (ex: 2 pour Paris en été)
+        """
+        self.session_filter = allowed_ranges
+        self.session_tz_offset = tz_offset
+
+    def _is_session_allowed(self) -> tuple[bool, str]:
+        """Retourne (autorisé, message) selon l'heure actuelle."""
+        if not self.session_filter:
+            return True, ""
+        from datetime import datetime, timezone, timedelta
+        now_utc = datetime.now(timezone.utc)
+        now_local = now_utc + timedelta(hours=self.session_tz_offset)
+        hour = now_local.hour
+        for start, end in self.session_filter:
+            if start <= end:
+                if start <= hour < end:
+                    return True, ""
+            else:  # plage qui chevauche minuit ex: (22, 6)
+                if hour >= start or hour < end:
+                    return True, ""
+        # Heure locale pour le message
+        session_str = ", ".join(f"{s}h-{e}h" for s, e in self.session_filter)
+        return False, f"🌙 Session asiatique — trading suspendu ({now_local.strftime('%H:%M')} hors de {session_str})"
 
     # ------------------------------------------------------------------
     # Méthode principale appelée à chaque nouvelle bougie HTF
@@ -246,7 +287,18 @@ class PaperTradingEngine:
             if active_fvgs else "Pas de FVG actif"
         )
 
-        # 5. Exécution du trade (si action non nulle)
+        # 5. Filtre de session — bloquer si hors plage autorisée
+        session_ok, session_msg = self._is_session_allowed()
+        if not session_ok and action != 0 and self.open_trade is None:
+            result["message"] = session_msg
+            result["action_label"] = "BLOQUÉ"
+            self.last_action = "BLOQUÉ (session)"
+            self.last_action_time = datetime.now().strftime("%H:%M:%S")
+            self.equity_curve.append(self.balance)
+            result["balance"] = self.balance
+            return result
+
+        # 6. Exécution du trade (si action non nulle)
         cooldown_ok = (self.current_step - self.last_close_step) >= 3
 
         if action != 0 and self.open_trade is None and cooldown_ok:
